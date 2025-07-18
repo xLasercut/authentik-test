@@ -3,5 +3,6 @@
 
 
 jellyfin/*
+authentik/*
 
 !.gitkeep
