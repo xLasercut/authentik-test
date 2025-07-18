@@ -1,5 +1,14 @@
 ---
 services:
+  nginx:
+    image: 'docker.io/jc21/nginx-proxy-manager:latest'
+    ports:
+      - '80:80'
+      - '81:81'
+      - '443:443'
+    volumes:
+      - ./nginx/data:/data
+      - ./nginx/letsencrypt:/etc/letsencrypt
   jellyfin:
     image: docker.io/linuxserver/jellyfin:latest
     container_name: jellyfin
@@ -16,7 +25,6 @@ services:
 
   postgresql:
     image: docker.io/library/postgres:16-alpine
-    restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}" ]
       start_period: 20s
@@ -24,7 +32,7 @@ services:
       retries: 5
       timeout: 5s
     volumes:
-      - database:/var/lib/postgresql/data
+      - ./authentik/database:/var/lib/postgresql/data
     environment:
       POSTGRES_PASSWORD: ${PG_PASS:?database password required}
       POSTGRES_USER: ${PG_USER:-authentik}
@@ -34,7 +42,6 @@ services:
   redis:
     image: docker.io/library/redis:alpine
     command: --save 60 1 --loglevel warning
-    restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "redis-cli ping | grep PONG" ]
       start_period: 20s
@@ -42,10 +49,9 @@ services:
       retries: 5
       timeout: 3s
     volumes:
-      - redis:/data
+      - ./authentik/redis:/data
   server:
     image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.6.3}
-    restart: unless-stopped
     command: server
     environment:
       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?secret key required}
@@ -55,8 +61,8 @@ services:
       AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
       AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
     volumes:
-      - ./media:/media
-      - ./custom-templates:/templates
+      - ./authentik/media:/media
+      - ./authentik/custom-templates:/templates
     env_file:
       - .env
     ports:
@@ -69,7 +75,6 @@ services:
         condition: service_healthy
   worker:
     image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.6.3}
-    restart: unless-stopped
     command: worker
     environment:
       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?secret key required}
@@ -87,9 +92,9 @@ services:
     user: root
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./media:/media
-      - ./certs:/certs
-      - ./custom-templates:/templates
+      - ./authentik/media:/media
+      - ./authentik/certs:/certs
+      - ./authentik/custom-templates:/templates
     env_file:
       - .env
     depends_on:
@@ -97,9 +102,3 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-
-volumes:
-  database:
-    driver: local
-  redis:
-    driver: local
